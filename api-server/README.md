@@ -1,86 +1,70 @@
 # api-server
 
-The **api-server** is a Node.js/Express HTTP server that:
-
-- Connects to **MongoDB** to store and query cryptocurrency statistics.
-- Subscribes to a **NATS** message queue; on each `{ trigger: "update" }` event it fetches fresh stats from CoinGecko and persists them.
-- Exposes two REST endpoints: `/stats` and `/deviation`.
+A Node.js/Express server that fetches cryptocurrency statistics from CoinGecko and stores them in MongoDB. It listens for trigger events via Redis pub/sub and exposes two REST APIs.
 
 ---
 
 ## Prerequisites
 
-| Dependency | Version |
-|---|---|
-| Node.js | ≥ 18 |
-| npm | ≥ 9 |
-| NATS server | 2.x (see root `docker-compose.yml`) |
-| MongoDB Atlas | any recent version |
+- Node.js v18+
+- MongoDB Atlas account → [mongodb.com/atlas](https://mongodb.com/atlas)
+- Upstash Redis account → [upstash.com](https://upstash.com)
+- CoinGecko API key (free) → [coingecko.com/en/api](https://www.coingecko.com/en/api)
 
 ---
 
 ## Setup
 
-### 1. Install dependencies
-
+**1. Install dependencies**
 ```bash
 cd api-server
 npm install
 ```
 
-### 2. Configure environment variables
-
+**2. Configure environment variables**
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env`:
-
+Open `.env` and fill in your values:
 ```env
-MONGODB_URI=mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/koinx?retryWrites=true&w=majority
-NATS_URL=nats://localhost:4222
-COINGECKO_API_KEY=your_api_key_here   # from https://www.coingecko.com/en/api
+MONGODB_URI=mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/koinx
+REDIS_URL=rediss://default:<password>@<endpoint>.upstash.io:6379
+COINGECKO_API_KEY=your_key_here
 PORT=3000
 ```
 
-### 3. Start NATS (from the project root)
-
+**3. Start the server**
 ```bash
-docker compose up -d
+npm run dev      # development (auto-reload)
+npm start        # production
 ```
 
-### 4. Run the server
-
-```bash
-# Development (auto-reload)
-npm run dev
-
-# Production
-npm start
-```
+On startup, the server will:
+- Connect to MongoDB
+- Connect to Redis and subscribe to the `crypto.update` channel
+- Immediately fetch and store crypto stats from CoinGecko
 
 ---
 
 ## API Reference
 
-### `GET /stats`
+### GET `/stats`
 
-Returns the **latest** price statistics for a given coin.
+Returns the latest price data for a coin.
 
 **Query Parameters**
 
-| Parameter | Type | Required | Values |
-|---|---|---|---|
-| `coin` | string | ✅ | `bitcoin`, `ethereum`, `matic-network` |
+| Param | Required | Values |
+|-------|----------|--------|
+| `coin` | ✅ | `bitcoin`, `ethereum`, `matic-network` |
 
-**Example Request**
-
+**Example**
 ```
 GET /stats?coin=bitcoin
 ```
 
-**Example Response `200 OK`**
-
+**Response**
 ```json
 {
   "price": 40000,
@@ -89,33 +73,24 @@ GET /stats?coin=bitcoin
 }
 ```
 
-**Error Responses**
-
-| Status | Reason |
-|---|---|
-| `400` | Invalid or missing `coin` parameter |
-| `404` | No data found yet for the coin |
-
 ---
 
-### `GET /deviation`
+### GET `/deviation`
 
-Returns the **standard deviation** of the price for the last 100 stored records.
+Returns the standard deviation of price across the last 100 stored records.
 
 **Query Parameters**
 
-| Parameter | Type | Required | Values |
-|---|---|---|---|
-| `coin` | string | ✅ | `bitcoin`, `ethereum`, `matic-network` |
+| Param | Required | Values |
+|-------|----------|--------|
+| `coin` | ✅ | `bitcoin`, `ethereum`, `matic-network` |
 
-**Example Request**
-
+**Example**
 ```
 GET /deviation?coin=bitcoin
 ```
 
-**Example Response `200 OK`**
-
+**Response**
 ```json
 {
   "deviation": 4082.48
@@ -124,9 +99,13 @@ GET /deviation?coin=bitcoin
 
 ---
 
-### `GET /health`
+### GET `/health`
 
-Returns `200 OK` if the server is running.
+Returns server status.
+
+```json
+{ "status": "ok" }
+```
 
 ---
 
@@ -136,19 +115,18 @@ Returns `200 OK` if the server is running.
 api-server/
 ├── src/
 │   ├── config/
-│   │   ├── db.js            # MongoDB connection
-│   │   └── nats.js          # NATS subscriber
+│   │   ├── db.js              # MongoDB connection
+│   │   └── nats.js            # Redis pub/sub subscriber
 │   ├── controllers/
 │   │   └── cryptoController.js
 │   ├── models/
-│   │   └── CryptoStat.js    # Mongoose schema
+│   │   └── CryptoStat.js      # Mongoose schema
 │   ├── routes/
 │   │   └── crypto.js
 │   ├── services/
-│   │   └── cryptoService.js # storeCryptoStats()
-│   └── index.js             # Entry point
+│   │   └── cryptoService.js   # storeCryptoStats()
+│   └── index.js
 ├── .env.example
-├── .gitignore
 └── package.json
 ```
 
@@ -156,9 +134,9 @@ api-server/
 
 ## Scripts
 
-| Script | Description |
-|---|---|
-| `npm start` | Start server in production mode |
-| `npm run dev` | Start server with nodemon (auto-reload) |
+| Command | Description |
+|---------|-------------|
+| `npm start` | Run in production mode |
+| `npm run dev` | Run with auto-reload (nodemon) |
 | `npm run lint` | Run ESLint |
-| `npm test` | Run Jest tests |
+| `npm test` | Run tests |
