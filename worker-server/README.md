@@ -1,56 +1,40 @@
 # worker-server
 
-The **worker-server** is a lightweight Node.js service that publishes a `{ trigger: "update" }` message to a **NATS** subject (`crypto.update`) every **15 minutes**.
-
-The **api-server** subscribes to that subject and responds by fetching fresh cryptocurrency data from CoinGecko and storing it in MongoDB.
+A lightweight Node.js service that publishes a trigger event to Redis pub/sub every **15 minutes**. The `api-server` listens for this event and fetches fresh cryptocurrency data from CoinGecko.
 
 ---
 
 ## Prerequisites
 
-| Dependency | Version |
-|---|---|
-| Node.js | ≥ 18 |
-| npm | ≥ 9 |
-| NATS server | 2.x (see root `docker-compose.yml`) |
+- Node.js v18+
+- Upstash Redis account → [upstash.com](https://upstash.com)
 
 ---
 
 ## Setup
 
-### 1. Install dependencies
-
+**1. Install dependencies**
 ```bash
 cd worker-server
 npm install
 ```
 
-### 2. Configure environment variables
-
+**2. Configure environment variables**
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env`:
-
+Open `.env` and fill in your value:
 ```env
-NATS_URL=nats://localhost:4222
+REDIS_URL=rediss://default:<password>@<endpoint>.upstash.io:6379
 ```
 
-### 3. Start NATS (from the project root)
+> Use the same `REDIS_URL` as in `api-server/.env`.
 
+**3. Start the server**
 ```bash
-docker compose up -d
-```
-
-### 4. Run the server
-
-```bash
-# Development (auto-reload)
-npm run dev
-
-# Production
-npm start
+npm run dev      # development (auto-reload)
+npm start        # production
 ```
 
 ---
@@ -58,22 +42,22 @@ npm start
 ## How It Works
 
 ```
-[node-cron: */15 * * * *]
-        │
-        ▼
-publishTrigger()
-        │
-        ▼
-NATS publish → subject: "crypto.update"
-        │
-        ▼   (received by api-server subscriber)
-storeCryptoStats()  →  MongoDB
+Every 15 minutes
+      │
+      ▼
+ node-cron fires
+      │
+      ▼
+Redis PUBLISH → channel: "crypto.update"
+      │
+      ▼  (received by api-server)
+storeCryptoStats() → MongoDB
 ```
 
-1. On startup, the server connects to NATS.
-2. A `node-cron` job is scheduled with the expression `*/15 * * * *` — this fires at `:00`, `:15`, `:30`, and `:45` of every hour.
-3. On each tick, it publishes `{ "trigger": "update" }` as a JSON string to the `crypto.update` NATS subject.
-4. The `api-server`, which subscribes to that subject, receives the message and calls `storeCryptoStats()`.
+1. On startup, the server connects to Redis.
+2. A `node-cron` job runs on the schedule `*/15 * * * *` (at `:00`, `:15`, `:30`, `:45` every hour).
+3. On each tick, it publishes `{ "trigger": "update" }` to the `crypto.update` Redis channel.
+4. The `api-server`, which subscribes to that channel, receives the message and calls `storeCryptoStats()`.
 
 ---
 
@@ -83,12 +67,11 @@ storeCryptoStats()  →  MongoDB
 worker-server/
 ├── src/
 │   ├── config/
-│   │   └── nats.js        # NATS connection & publishTrigger()
+│   │   └── nats.js        # Redis pub/sub publisher
 │   ├── jobs/
 │   │   └── triggerJob.js  # node-cron schedule
-│   └── index.js           # Entry point
+│   └── index.js
 ├── .env.example
-├── .gitignore
 └── package.json
 ```
 
@@ -96,8 +79,8 @@ worker-server/
 
 ## Scripts
 
-| Script | Description |
-|---|---|
-| `npm start` | Start server in production mode |
-| `npm run dev` | Start server with nodemon (auto-reload) |
+| Command | Description |
+|---------|-------------|
+| `npm start` | Run in production mode |
+| `npm run dev` | Run with auto-reload (nodemon) |
 | `npm run lint` | Run ESLint |

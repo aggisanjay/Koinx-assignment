@@ -1,11 +1,11 @@
 {
   "name": "worker-server",
   "version": "1.0.0",
-  "description": "KoinX worker server – publishes a NATS event every 15 minutes to trigger crypto data collection.",
+  "description": "KoinX worker server \u2013 publishes a NATS event every 15 minutes to trigger crypto data collection.",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "nodemon src/index.js",
+    "start": "node init && node src/index.js",
+    "dev": "node init && nodemon src/index.js",
     "lint": "eslint src/**/*.js"
   },
   "dependencies": {
